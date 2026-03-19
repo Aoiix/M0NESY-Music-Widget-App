@@ -2,7 +2,8 @@
 node_modules/
 
 # Songs
-songs/
+songs/*
+!songs/Hide.mp3
 
 # Logs
 logs/
