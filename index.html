@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>m0NESYWidget1</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+  </head>
+
+ <body>
+  <div class="app">
+    <div id="m0NESYaudioplayer">
+      <img src="assets/falconslogo.svg" class="falconslogo">
+      <!-- Audio Player -->
+      <audio id="audio-player">
+        <source id="audio-source" type="audio/mpeg">
+      </audio>
+
+      <!-- Song title -->
+      <img src="assets/title.svg" class="titlebg">
+      <div id="song-title">Song-Title</div>
+
+      <!-- Cover / Pixel Image -->
+      <div id="display-area">
+        <img src="assets/displayarea.svg" class="displaybg">
+        <img src="assets/Bgtrophiesweaps.png" class="bgassets">
+        
+        <div id="character-container">
+          <img id="character" src="assets/idle/idle_0.png">
+        </div>
+        <div class="progress-row">
+          <span id="time-display">0:00 / 0:00</span>
+          <input type="range" id="progress-bar" min="0" max="100" value="0">
+        </div>        
+      </div>
+
+      <!-- Controls -->
+      <div id="controls-box">
+
+        <!-- background -->
+
+        <img src="assets/controls.svg" class="controlsbg">
+
+        <!-- volume slider -->
+
+        <div class="volume">
+          <span class="quiet"></span>
+          <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5">
+          <span class="loud"></span>
+        </div>
+
+        <!-- playback controls -->
+
+        <div class="controls">
+
+      <!-- return button (flipped skip icon) -->
+      <button onclick="prevSong()" class="control-btn return">
+        <img src="assets/skip.svg" class="icon return-icon">
+      </button>
+
+      <!-- play / pause button -->
+      <div class="play-wrapper">
+        <img src="assets/Circletoplaysongs.svg" class="playpausebg">
+        <button onclick="updatePlayer()" id="play-pause" class="control-btn play">
+          <img src="assets/play.svg" id="play-icon">
+        </button>
+      </div>
+
+      <!-- skip button -->
+      <button onclick="nextSong()" class="control-btn skip">
+        <img src="assets/skip.svg" class="icon skip-icon">
+      </button>
+
+        </div>
+
+        <!-- menu button -->
+
+        <button class="menu" id="menu-button">
+          <img src="assets/menub.svg" class="menu-icon">
+        </button>
+
+        <!-- signature -->
+
+        <img src="assets/m0NESYsign.svg" class="signature">
+
+        <!-- Loop Button -->
+        <button class="loop" id="loopButton">
+          <img src="assets/LoopButton.svg" class="loop-icon" id="loopIcon">
+        </button>
+      </div>
+
+  </div>
+
+  <script src="script.js"></script>
+  </body>
+</html>

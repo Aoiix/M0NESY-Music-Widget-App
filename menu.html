@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title></title>
+<link rel="stylesheet" href="menu.css">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap" rel="stylesheet">
+</head>
+<body class="menu-loading">
+    <div class="MenuScreen">
+        <div class="menu-header">
+            <button id="add-songs-button" type="button">Add</button>
+            <input id="song-search" type="text" placeholder="Search songs">
+            <button id="close-menu">
+                <img src="assets/closebutton.svg" class="close-icon">
+            </button>
+        </div>
+
+        <div id="MenuDisplay">
+            <p id="menu-status" aria-live="polite"></p>
+            <ol id="song-list"></ol>
+        </div>
+        <div id="menu-scrollbar" aria-hidden="true">
+            <div id="menu-scrollbar-track">
+                <div id="menu-scrollbar-thumb"></div>
+            </div>
+        </div>
+    </div>
+    <script src="menu.js"></script>
+</body>
+</html>

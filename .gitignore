@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+
+# Songs
+songs/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+
+# Coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Optional: keep lockfile (recommended for apps)
+# Uncomment ONE depending on your package manager:
+# !package-lock.json
+# !yarn.lock
+# !pnpm-lock.yaml
+
+# Electron specific
+release/
+app/dist/
+electron-builder.yml
+*.blockmap
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+*.tgz
+*.bak
