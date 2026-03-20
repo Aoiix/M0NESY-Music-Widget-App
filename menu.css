@@ -2,16 +2,23 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
+  min-height: 100%;
   font-family: "Pixelify Sans", sans-serif;
 
   background-image: url("assets/menubg.svg");
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
+  background-attachment: scroll;
 
   image-rendering: pixelated;
 

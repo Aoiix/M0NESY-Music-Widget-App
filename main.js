@@ -2,22 +2,58 @@ const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
-const songsFilePath = path.join(__dirname, "songs.json");
-const songsDirectory = path.join(__dirname, "songs");
+const legacySongsFilePath = path.join(__dirname, "songs.json");
+const legacySongsDirectory = path.join(__dirname, "songs");
+
+let songsFilePath;
+let songsDirectory;
 
 let mainWindow;
 let menuWindow;
 let isMenuReady = false;
+let shouldShowMenuWhenReady = false;
 let songsDirectoryWatcher;
 let songsDirectoryChangeTimer;
+const MENU_WIDTH = 248;
+const MENU_HEIGHT = 304;
 
 function syncMenuPosition() {
   if (!mainWindow || !menuWindow || menuWindow.isDestroyed()) {
     return;
   }
 
+  if (!menuWindow.isVisible()) {
+    return;
+  }
+
   const bounds = mainWindow.getBounds();
   menuWindow.setPosition(bounds.x + bounds.width + 10, bounds.y, false);
+}
+
+function lockMenuWindowBounds() {
+  if (!menuWindow || menuWindow.isDestroyed()) {
+    return;
+  }
+
+  menuWindow.setResizable(false);
+  menuWindow.setMinimumSize(MENU_WIDTH, MENU_HEIGHT);
+  menuWindow.setMaximumSize(MENU_WIDTH, MENU_HEIGHT);
+  menuWindow.setContentSize(MENU_WIDTH, MENU_HEIGHT);
+}
+
+function showMenuWindow() {
+  if (!mainWindow || !menuWindow || menuWindow.isDestroyed() || !isMenuReady) {
+    return;
+  }
+
+  lockMenuWindowBounds();
+  syncMenuPosition();
+
+  if (!menuWindow.isVisible()) {
+    menuWindow.show();
+  }
+
+  menuWindow.focus();
 }
 
 function sortSongs(songs) {
@@ -26,7 +62,37 @@ function sortSongs(songs) {
   );
 }
 
+function initializeSongsLibraryPaths() {
+  if (songsFilePath && songsDirectory) {
+    return;
+  }
+
+  const libraryDirectory = path.join(app.getPath("userData"), "library");
+  songsFilePath = path.join(libraryDirectory, "songs.json");
+  songsDirectory = path.join(libraryDirectory, "songs");
+
+  fs.mkdirSync(libraryDirectory, { recursive: true });
+  fs.mkdirSync(songsDirectory, { recursive: true });
+}
+
+function resolveSongFilePath(songFile) {
+  if (typeof songFile !== "string" || !songFile.trim()) {
+    return "";
+  }
+
+  return path.isAbsolute(songFile)
+    ? path.resolve(songFile)
+    : path.resolve(__dirname, songFile);
+}
+
+function isPathInsideDirectory(filePath, directoryPath) {
+  const normalizedDirectoryPath = path.resolve(directoryPath) + path.sep;
+  return path.resolve(filePath).startsWith(normalizedDirectoryPath);
+}
+
 function loadSongs() {
+  initializeSongsLibraryPaths();
+
   try {
     const fileContents = fs.readFileSync(songsFilePath, "utf8");
     const songs = JSON.parse(fileContents);
@@ -48,6 +114,7 @@ function loadSongs() {
 }
 
 function saveSongs(songs) {
+  initializeSongsLibraryPaths();
   const sortedSongs = sortSongs(songs);
   fs.writeFileSync(songsFilePath, JSON.stringify(sortedSongs, null, 2) + "\n", "utf8");
   return sortedSongs;
@@ -60,6 +127,16 @@ function fileExists(filePath) {
   } catch (error) {
     return false;
   }
+}
+
+function getMp3DirectoryEntries(directoryPath) {
+  if (!fileExists(directoryPath)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(directoryPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".mp3");
 }
 
 function getUniqueSongPath(originalName) {
@@ -96,62 +173,49 @@ function areSongsEqual(leftSongs, rightSongs) {
 }
 
 function isSongFileAvailable(songFile) {
-  if (typeof songFile !== "string") {
-    return false;
-  }
-
-  const absoluteFilePath = path.resolve(__dirname, songFile);
-  const normalizedSongsDirectory = path.resolve(songsDirectory) + path.sep;
-
-  return absoluteFilePath.startsWith(normalizedSongsDirectory) && fileExists(absoluteFilePath);
+  initializeSongsLibraryPaths();
+  const absoluteFilePath = resolveSongFilePath(songFile);
+  return Boolean(absoluteFilePath) && isPathInsideDirectory(absoluteFilePath, songsDirectory) && fileExists(absoluteFilePath);
 }
 
 function getExistingSongsFromDirectory() {
-  if (!fileExists(songsDirectory)) {
-    return [];
-  }
-
-  return fs
-    .readdirSync(songsDirectory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".mp3")
-    .map((entry) => toSongTitle(entry.name));
+  initializeSongsLibraryPaths();
+  return getMp3DirectoryEntries(songsDirectory).map((entry) => toSongTitle(entry.name));
 }
 
 function getSongEntriesFromDirectory() {
-  if (!fileExists(songsDirectory)) {
-    return [];
-  }
+  initializeSongsLibraryPaths();
 
-  return fs
-    .readdirSync(songsDirectory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".mp3")
-    .map((entry) => ({
+  return getMp3DirectoryEntries(songsDirectory).map((entry) => ({
       title: toSongTitle(entry.name),
-      file: path.posix.join("songs", entry.name.replace(/\\/g, "/"))
+      file: path.join(songsDirectory, entry.name)
     }));
 }
 
 function reconcileSongsWithDirectory(storedSongs) {
+  const songsFromDirectory = getSongEntriesFromDirectory();
+  const availableFiles = new Set(songsFromDirectory.map((song) => path.resolve(song.file)));
   const validStoredSongs = Array.isArray(storedSongs)
     ? storedSongs.filter(
         (song) =>
           song &&
           typeof song.title === "string" &&
           typeof song.file === "string" &&
-          isSongFileAvailable(song.file)
+          availableFiles.has(path.resolve(song.file))
       )
     : [];
-  const songsFromDirectory = getSongEntriesFromDirectory();
-  const seenFiles = new Set(validStoredSongs.map((song) => song.file));
+  const seenFiles = new Set(validStoredSongs.map((song) => path.resolve(song.file)));
   const reconciledSongs = [...validStoredSongs];
 
   for (const song of songsFromDirectory) {
-    if (seenFiles.has(song.file)) {
+    const normalizedFilePath = path.resolve(song.file);
+
+    if (seenFiles.has(normalizedFilePath)) {
       continue;
     }
 
     reconciledSongs.push(song);
-    seenFiles.add(song.file);
+    seenFiles.add(normalizedFilePath);
   }
 
   return reconciledSongs;
@@ -162,11 +226,12 @@ function importSongs(filePaths) {
     return { songs: loadSongs(), addedSongs: [] };
   }
 
+  initializeSongsLibraryPaths();
   fs.mkdirSync(songsDirectory, { recursive: true });
 
   const storedSongs = loadSongs();
   const existingSongs = getExistingSongsFromDirectory();
-  const existingFiles = new Set(storedSongs.map((song) => song.file));
+  const existingFiles = new Set(storedSongs.map((song) => path.resolve(song.file)));
   const existingTitles = new Set(existingSongs.map((song) => normalizeSongValue(song)));
   const importedSourcePaths = new Set();
   const addedSongs = [];
@@ -192,18 +257,18 @@ function importSongs(filePaths) {
 
     fs.copyFileSync(filePath, destinationPath);
 
-    const relativeFile = path.posix.join("songs", destinationName.replace(/\\/g, "/"));
+    const normalizedDestinationPath = path.resolve(destinationPath);
 
-    if (existingFiles.has(relativeFile)) {
+    if (existingFiles.has(normalizedDestinationPath)) {
       continue;
     }
 
     const song = {
       title: toSongTitle(destinationName),
-      file: relativeFile
+      file: normalizedDestinationPath
     };
 
-    existingFiles.add(relativeFile);
+    existingFiles.add(normalizedDestinationPath);
     existingTitles.add(normalizeSongValue(song.title));
     importedSourcePaths.add(normalizedSourcePath);
     addedSongs.push(song);
@@ -218,6 +283,7 @@ function removeSong(file) {
     return { songs: loadSongs(), removed: false };
   }
 
+  initializeSongsLibraryPaths();
   const songs = loadSongs();
   const nextSongs = songs.filter((song) => song.file !== file);
 
@@ -225,15 +291,35 @@ function removeSong(file) {
     return { songs, removed: false };
   }
 
-  const absoluteFilePath = path.join(__dirname, file);
-  const normalizedSongsDirectory = path.resolve(songsDirectory) + path.sep;
-  const normalizedFilePath = path.resolve(absoluteFilePath);
+  const normalizedFilePath = resolveSongFilePath(file);
 
-  if (normalizedFilePath.startsWith(normalizedSongsDirectory) && fileExists(normalizedFilePath)) {
+  if (normalizedFilePath && isPathInsideDirectory(normalizedFilePath, songsDirectory) && fileExists(normalizedFilePath)) {
     fs.unlinkSync(normalizedFilePath);
   }
 
   return { songs: saveSongs(nextSongs), removed: true };
+}
+
+function getLegacySongsFromDirectory() {
+  return getMp3DirectoryEntries(legacySongsDirectory).map((entry) => path.join(legacySongsDirectory, entry.name));
+}
+
+function migrateLegacySongsLibrary() {
+  initializeSongsLibraryPaths();
+
+  const hasCurrentSongs = fileExists(songsFilePath) || getSongEntriesFromDirectory().length > 0;
+
+  if (hasCurrentSongs) {
+    return;
+  }
+
+  const legacySongFiles = getLegacySongsFromDirectory();
+
+  if (!legacySongFiles.length && !fileExists(legacySongsFilePath)) {
+    return;
+  }
+
+  importSongs(legacySongFiles);
 }
 
 function broadcastSongsUpdated(songs) {
@@ -254,6 +340,7 @@ function syncSongsFromDirectoryChange() {
 }
 
 function watchSongsDirectory() {
+  initializeSongsLibraryPaths();
   fs.mkdirSync(songsDirectory, { recursive: true });
 
   if (songsDirectoryWatcher) {
@@ -279,9 +366,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile("index.html");
-  createMenuWindow();
 
-  mainWindow.on("move", syncMenuPosition);
   mainWindow.on("moved", syncMenuPosition);
 }
 
@@ -295,10 +380,11 @@ function createMenuWindow() {
   menuWindow = new BrowserWindow({
     title: "",
     backgroundColor: "#00000000",
-    width: 248,
-    height: 304,
+    width: MENU_WIDTH,
+    height: MENU_HEIGHT,
     x: mainBounds.x + mainBounds.width + 10,
     y: mainBounds.y,
+    useContentSize: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -315,33 +401,40 @@ function createMenuWindow() {
     }
   });
 
+  lockMenuWindowBounds();
   menuWindow.loadFile("menu.html");
   syncMenuPosition();
 
-  menuWindow.on("close", (event) => {
-    if (!app.isQuiting) {
-      event.preventDefault();
-      menuWindow.hide();
-    }
+  menuWindow.on("will-resize", (event) => {
+    event.preventDefault();
+    lockMenuWindowBounds();
+  });
+
+  menuWindow.on("resize", () => {
+    lockMenuWindowBounds();
+    syncMenuPosition();
   });
 
   menuWindow.on("closed", () => {
     menuWindow = null;
     isMenuReady = false;
+    shouldShowMenuWhenReady = false;
   });
 }
 
 ipcMain.on("open-menu", () => {
+  shouldShowMenuWhenReady = true;
   createMenuWindow();
 
-  if (!menuWindow || !isMenuReady) {
+  if (!menuWindow || menuWindow.isDestroyed()) {
     return;
   }
 
-  const bounds = mainWindow.getBounds();
-  menuWindow.setPosition(bounds.x + bounds.width + 10, bounds.y, false);
-  menuWindow.show();
-  menuWindow.focus();
+  if (!isMenuReady) {
+    return;
+  }
+
+  showMenuWindow();
 });
 
 ipcMain.on("play-song", (event, file) => {
@@ -351,6 +444,10 @@ ipcMain.on("play-song", (event, file) => {
 ipcMain.on("menu-ready", () => {
   if (menuWindow && !menuWindow.isDestroyed()) {
     isMenuReady = true;
+
+    if (shouldShowMenuWhenReady) {
+      showMenuWindow();
+    }
   }
 });
 
@@ -387,6 +484,8 @@ ipcMain.handle("remove-song", (event, file) => {
 });
 
 app.whenReady().then(() => {
+  initializeSongsLibraryPaths();
+  migrateLegacySongsLibrary();
   watchSongsDirectory();
   createWindow();
 });

@@ -1,6 +1,7 @@
 const { ipcRenderer } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 function shuffleSongs(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -60,18 +61,68 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     let state = "idle";
     let frameIndex = 0;
-    let animationTimer = null;
+    let animationTimerId = null;
     let inactivityTimer = null;
     let idleLoopsUntilBlink = getNextBlinkLoopCount();
     const sleepDelayMs = 30 * 60 * 1000;
+    let rafTitleFitId = null;
+    let lastFittedTitleText = "";
+    let isWindowVisible = !document.hidden;
+    let lastActivityAt = 0;
+    const activityThrottleMs = 250;
+    let loopButtonFeedbackTimer = null;
+    const textFitCache = new Map();
 
     function fitTextToWidth(element, maxFontSize, minFontSize) {
-        element.style.fontSize = maxFontSize + "px";
+        const availableWidth = element.clientWidth;
+        const cacheKey = [
+            element.textContent,
+            availableWidth,
+            maxFontSize,
+            minFontSize
+        ].join("|");
+        const cachedFontSize = textFitCache.get(cacheKey);
 
-        while (element.scrollWidth > element.clientWidth && maxFontSize > minFontSize) {
-            maxFontSize -= 1;
-            element.style.fontSize = maxFontSize + "px";
+        if (cachedFontSize) {
+            element.style.fontSize = cachedFontSize + "px";
+            return;
         }
+
+        let low = minFontSize;
+        let high = maxFontSize;
+        let bestFit = minFontSize;
+
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            element.style.fontSize = mid + "px";
+
+            if (element.scrollWidth <= availableWidth) {
+                bestFit = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        element.style.fontSize = bestFit + "px";
+        textFitCache.set(cacheKey, bestFit);
+    }
+
+    function scheduleSongTitleFit(force = false) {
+        if (!force && lastFittedTitleText === title.textContent && rafTitleFitId !== null) {
+            return;
+        }
+
+        lastFittedTitleText = title.textContent;
+
+        if (rafTitleFitId !== null) {
+            cancelAnimationFrame(rafTitleFitId);
+        }
+
+        rafTitleFitId = requestAnimationFrame(() => {
+            rafTitleFitId = null;
+            fitTextToWidth(title, 21, 12);
+        });
     }
 
     function getNextBlinkLoopCount() {
@@ -99,39 +150,85 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     function playSequence(name) {
-        clearInterval(animationTimer);
         state = name;
         frameIndex = 0;
-
         const sequence = sequences[name];
-        const frameTime = 1000 / sequence.fps;
+        const nextFrameSrc = sequence.frames[0];
 
-        character.src = sequence.frames[0];
+        if (character.src !== nextFrameSrc) {
+            character.src = nextFrameSrc;
+        }
 
-        animationTimer = setInterval(() => {
-            frameIndex++;
+        if (isWindowVisible) {
+            scheduleNextAnimationFrame(1000 / sequence.fps);
+        }
+    }
 
-            if (frameIndex >= sequence.frames.length) {
-                if (sequence.loop) {
+    function stopAnimationLoop() {
+        if (animationTimerId !== null) {
+            clearTimeout(animationTimerId);
+            animationTimerId = null;
+        }
+    }
+
+    function scheduleNextAnimationFrame(delayMs) {
+        stopAnimationLoop();
+        animationTimerId = setTimeout(tickAnimation, delayMs);
+    }
+
+    function startAnimationLoop() {
+        if (animationTimerId !== null) {
+            return;
+        }
+
+        scheduleNextAnimationFrame(1000 / sequences[state].fps);
+    }
+
+    function tickAnimation() {
+        animationTimerId = null;
+
+        if (!isWindowVisible) {
+            return;
+        }
+
+        const sequence = sequences[state];
+
+        if (!sequence || !sequence.frames.length) {
+            return;
+        }
+
+        if (sequence.loop) {
+            frameIndex += 1;
+
+            if (state === "idle" && audio.paused && !isSleeping) {
+                if (frameIndex >= sequence.frames.length) {
                     frameIndex = 0;
+                    idleLoopsUntilBlink -= 1;
 
-                    if (name === "idle" && audio.paused && !isSleeping) {
-                        idleLoopsUntilBlink--;
-
-                        if (idleLoopsUntilBlink <= 0) {
-                            idleLoopsUntilBlink = getNextBlinkLoopCount();
-                            playSequence("blink");
-                            return;
-                        }
+                    if (idleLoopsUntilBlink <= 0) {
+                        idleLoopsUntilBlink = getNextBlinkLoopCount();
+                        playSequence("blink");
+                        return;
                     }
-                } else {
-                    syncCharacterState();
-                    return;
                 }
             }
+            else if (frameIndex >= sequence.frames.length) {
+                frameIndex = 0;
+            }
+        } else if (frameIndex + 1 >= sequence.frames.length) {
+            syncCharacterState();
+            return;
+        } else {
+            frameIndex += 1;
+        }
 
-            character.src = sequence.frames[frameIndex];
-        }, frameTime);
+        const nextFrameSrc = sequence.frames[frameIndex];
+
+        if (character.src !== nextFrameSrc) {
+            character.src = nextFrameSrc;
+        }
+
+        scheduleNextAnimationFrame(1000 / sequence.fps);
     }
 
     function syncCharacterState() {
@@ -163,6 +260,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function registerActivityFromEvent(event) {
+        if (!audio.paused) {
+            return;
+        }
+
+        const now = performance.now();
+
+        if (event && event.type === "mousemove" && now - lastActivityAt < activityThrottleMs) {
+            return;
+        }
+
+        lastActivityAt = now;
+        registerActivity();
+    }
+
     function formatTime(seconds) {
         const minutes = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -172,12 +284,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     function updateSongTitle() {
         if (!playQueue.length) {
             title.textContent = "No Songs Added";
-            fitTextToWidth(title, 21, 12);
+            scheduleSongTitleFit();
             return;
         }
 
         title.textContent = playQueue[currentSongIndex].title;
-        fitTextToWidth(title, 21, 12);
+        scheduleSongTitleFit();
     }
 
     function buildPlayQueue(currentFile) {
@@ -235,7 +347,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         currentSongIndex = index;
         const song = playQueue[index];
-        const songPath = path.join(__dirname, song.file);
+        const songPath = path.isAbsolute(song.file) ? song.file : path.join(__dirname, song.file);
 
         if (!fs.existsSync(songPath)) {
             removeMissingSong(song.file);
@@ -248,9 +360,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             return loadSong(Math.min(currentSongIndex, playQueue.length - 1));
         }
 
-        source.src = song.file;
+        source.src = pathToFileURL(songPath).toString();
         title.textContent = song.title;
-        fitTextToWidth(title, 21, 12);
+        scheduleSongTitleFit();
         audio.load();
         return true;
     }
@@ -265,6 +377,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             loopIcon.src = "assets/LoopButton.svg";
         }
+    }
+
+    function triggerLoopButtonFeedback() {
+        if (loopButtonFeedbackTimer !== null) {
+            clearTimeout(loopButtonFeedbackTimer);
+        }
+
+        loopButton.classList.remove("animating");
+        void loopButton.offsetWidth;
+        loopButton.classList.add("animating");
+
+        loopButtonFeedbackTimer = setTimeout(() => {
+            loopButton.classList.remove("animating");
+            loopButtonFeedbackTimer = null;
+        }, 900);
     }
 
     window.updatePlayer = function () {
@@ -378,6 +505,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         loopEnabled = !loopEnabled;
         audio.loop = loopEnabled;
         updateLoopIcon();
+        triggerLoopButtonFeedback();
     });
 
     character.addEventListener("click", (event) => {
@@ -433,8 +561,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    ["click", "mousemove", "keydown", "mousedown"].forEach((eventName) => {
-        document.addEventListener(eventName, registerActivity);
+    ["click", "keydown", "mousedown"].forEach((eventName) => {
+        document.addEventListener(eventName, registerActivityFromEvent);
+    });
+    document.addEventListener("mousemove", registerActivityFromEvent, { passive: true });
+
+    document.addEventListener("visibilitychange", () => {
+        isWindowVisible = !document.hidden;
+
+        if (isWindowVisible) {
+            startAnimationLoop();
+        } else {
+            stopAnimationLoop();
+        }
+    });
+
+    window.addEventListener("beforeunload", () => {
+        clearInactivityTimer();
+        stopAnimationLoop();
+
+        if (rafTitleFitId !== null) {
+            cancelAnimationFrame(rafTitleFitId);
+            rafTitleFitId = null;
+        }
+
+        if (loopButtonFeedbackTimer !== null) {
+            clearTimeout(loopButtonFeedbackTimer);
+            loopButtonFeedbackTimer = null;
+        }
     });
 
     const initialSongs = await ipcRenderer.invoke("get-songs");
@@ -444,4 +598,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateLoopIcon();
     resetInactivityTimer();
     playSequence("idle");
+    scheduleSongTitleFit(true);
 });

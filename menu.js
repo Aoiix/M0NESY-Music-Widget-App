@@ -20,6 +20,9 @@ const scrollbarThumb = document.getElementById("menu-scrollbar-thumb");
 let allSongs = [];
 let isDraggingScrollbar = false;
 let dragOffsetY = 0;
+let scrollbarSyncFrame = null;
+let songSearchFrame = null;
+const textFitCache = new Map();
 
 function setStatus(message) {
   if (!statusMessage) {
@@ -31,12 +34,49 @@ function setStatus(message) {
 }
 
 function fitTextToWidth(element, maxFontSize, minFontSize) {
-  element.style.fontSize = maxFontSize + "px";
+  const availableWidth = element.clientWidth;
+  const cacheKey = [
+    element.textContent,
+    availableWidth,
+    maxFontSize,
+    minFontSize
+  ].join("|");
+  const cachedFontSize = textFitCache.get(cacheKey);
 
-  while (element.scrollWidth > element.clientWidth && maxFontSize > minFontSize) {
-    maxFontSize -= 1;
-    element.style.fontSize = maxFontSize + "px";
+  if (cachedFontSize) {
+    element.style.fontSize = cachedFontSize + "px";
+    return;
   }
+
+  let low = minFontSize;
+  let high = maxFontSize;
+  let bestFit = minFontSize;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    element.style.fontSize = mid + "px";
+
+    if (element.scrollWidth <= availableWidth) {
+      bestFit = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  element.style.fontSize = bestFit + "px";
+  textFitCache.set(cacheKey, bestFit);
+}
+
+function scheduleScrollbarSync() {
+  if (scrollbarSyncFrame !== null) {
+    return;
+  }
+
+  scrollbarSyncFrame = requestAnimationFrame(() => {
+    scrollbarSyncFrame = null;
+    syncScrollbar();
+  });
 }
 
 function getFilteredSongs() {
@@ -110,7 +150,8 @@ async function handleRemoveSong(song) {
 
 function renderSongs() {
   const songs = getFilteredSongs();
-  list.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  list.textContent = "";
 
   songs.forEach((song, index) => {
     const li = document.createElement("li");
@@ -135,15 +176,17 @@ function renderSongs() {
     row.appendChild(button);
     row.appendChild(removeButton);
     li.appendChild(row);
-    list.appendChild(li);
+    fragment.appendChild(li);
     fitTextToWidth(button, 14, 9);
   });
+
+  list.appendChild(fragment);
 
   if (!songs.length) {
     setStatus(allSongs.length ? "No songs match your search." : "Drag MP3 files into the menu or use Add.");
   }
 
-  requestAnimationFrame(syncScrollbar);
+  scheduleScrollbarSync();
 }
 
 async function refreshSongs() {
@@ -222,11 +265,18 @@ window.addEventListener("drop", async (event) => {
 });
 
 searchInput.addEventListener("input", () => {
-  renderSongs();
+  if (songSearchFrame !== null) {
+    cancelAnimationFrame(songSearchFrame);
+  }
+
+  songSearchFrame = requestAnimationFrame(() => {
+    songSearchFrame = null;
+    renderSongs();
+  });
 });
 
-menuDisplay.addEventListener("scroll", syncScrollbar);
-window.addEventListener("resize", syncScrollbar);
+menuDisplay.addEventListener("scroll", scheduleScrollbarSync, { passive: true });
+window.addEventListener("resize", scheduleScrollbarSync);
 
 scrollbarThumb.addEventListener("mousedown", (event) => {
   isDraggingScrollbar = true;
@@ -290,10 +340,20 @@ async function revealMenuWhenReady() {
 
   document.body.classList.remove("menu-loading");
   document.body.classList.add("menu-ready");
-  syncScrollbar();
+  scheduleScrollbarSync();
   ipcRenderer.send("menu-ready");
 }
 
 window.addEventListener("load", () => {
   revealMenuWhenReady();
+});
+
+window.addEventListener("beforeunload", () => {
+  if (scrollbarSyncFrame !== null) {
+    cancelAnimationFrame(scrollbarSyncFrame);
+  }
+
+  if (songSearchFrame !== null) {
+    cancelAnimationFrame(songSearchFrame);
+  }
 });

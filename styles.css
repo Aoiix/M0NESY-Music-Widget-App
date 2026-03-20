@@ -631,12 +631,12 @@ input,
   opacity: 1;
 }
 
-.loop.active::before {
-  animation: loop-arrow-top 1.85s linear infinite;
+.loop.active.animating::before {
+  animation: loop-arrow-top 700ms ease-out 1;
 }
 
-.loop.active::after {
-  animation: loop-arrow-bottom 1.85s linear infinite;
+.loop.active.animating::after {
+  animation: loop-arrow-bottom 700ms ease-out 1;
 }
 
 @keyframes loop-arrow-top {
