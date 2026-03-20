@@ -8,6 +8,8 @@ const songsDirectory = path.join(__dirname, "songs");
 let mainWindow;
 let menuWindow;
 let isMenuReady = false;
+let songsDirectoryWatcher;
+let songsDirectoryChangeTimer;
 
 function syncMenuPosition() {
   if (!mainWindow || !menuWindow || menuWindow.isDestroyed()) {
@@ -33,9 +35,13 @@ function loadSongs() {
       return [];
     }
 
-    return sortSongs(
-      songs.filter((song) => song && typeof song.title === "string" && typeof song.file === "string")
-    );
+    const sortedSongs = sortSongs(reconcileSongsWithDirectory(songs));
+
+    if (!areSongsEqual(songs, sortedSongs)) {
+      saveSongs(sortedSongs);
+    }
+
+    return sortedSongs;
   } catch (error) {
     return [];
   }
@@ -78,6 +84,79 @@ function normalizeSongValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function areSongsEqual(leftSongs, rightSongs) {
+  if (!Array.isArray(leftSongs) || !Array.isArray(rightSongs) || leftSongs.length !== rightSongs.length) {
+    return false;
+  }
+
+  return leftSongs.every((song, index) => {
+    const otherSong = rightSongs[index];
+    return otherSong && song.title === otherSong.title && song.file === otherSong.file;
+  });
+}
+
+function isSongFileAvailable(songFile) {
+  if (typeof songFile !== "string") {
+    return false;
+  }
+
+  const absoluteFilePath = path.resolve(__dirname, songFile);
+  const normalizedSongsDirectory = path.resolve(songsDirectory) + path.sep;
+
+  return absoluteFilePath.startsWith(normalizedSongsDirectory) && fileExists(absoluteFilePath);
+}
+
+function getExistingSongsFromDirectory() {
+  if (!fileExists(songsDirectory)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(songsDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".mp3")
+    .map((entry) => toSongTitle(entry.name));
+}
+
+function getSongEntriesFromDirectory() {
+  if (!fileExists(songsDirectory)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(songsDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".mp3")
+    .map((entry) => ({
+      title: toSongTitle(entry.name),
+      file: path.posix.join("songs", entry.name.replace(/\\/g, "/"))
+    }));
+}
+
+function reconcileSongsWithDirectory(storedSongs) {
+  const validStoredSongs = Array.isArray(storedSongs)
+    ? storedSongs.filter(
+        (song) =>
+          song &&
+          typeof song.title === "string" &&
+          typeof song.file === "string" &&
+          isSongFileAvailable(song.file)
+      )
+    : [];
+  const songsFromDirectory = getSongEntriesFromDirectory();
+  const seenFiles = new Set(validStoredSongs.map((song) => song.file));
+  const reconciledSongs = [...validStoredSongs];
+
+  for (const song of songsFromDirectory) {
+    if (seenFiles.has(song.file)) {
+      continue;
+    }
+
+    reconciledSongs.push(song);
+    seenFiles.add(song.file);
+  }
+
+  return reconciledSongs;
+}
+
 function importSongs(filePaths) {
   if (!Array.isArray(filePaths) || filePaths.length === 0) {
     return { songs: loadSongs(), addedSongs: [] };
@@ -85,9 +164,10 @@ function importSongs(filePaths) {
 
   fs.mkdirSync(songsDirectory, { recursive: true });
 
-  const existingSongs = loadSongs();
-  const existingFiles = new Set(existingSongs.map((song) => song.file));
-  const existingTitles = new Set(existingSongs.map((song) => normalizeSongValue(song.title)));
+  const storedSongs = loadSongs();
+  const existingSongs = getExistingSongsFromDirectory();
+  const existingFiles = new Set(storedSongs.map((song) => song.file));
+  const existingTitles = new Set(existingSongs.map((song) => normalizeSongValue(song)));
   const importedSourcePaths = new Set();
   const addedSongs = [];
 
@@ -99,12 +179,10 @@ function importSongs(filePaths) {
     const normalizedSourcePath = path.resolve(filePath);
     const sourceTitle = toSongTitle(path.basename(filePath));
     const normalizedTitle = normalizeSongValue(sourceTitle);
-    const relativeSourceFile = path.posix.join("songs", path.basename(filePath).replace(/\\/g, "/"));
 
     if (
       importedSourcePaths.has(normalizedSourcePath) ||
-      existingTitles.has(normalizedTitle) ||
-      existingFiles.has(relativeSourceFile)
+      existingTitles.has(normalizedTitle)
     ) {
       continue;
     }
@@ -125,14 +203,13 @@ function importSongs(filePaths) {
       file: relativeFile
     };
 
-    existingSongs.push(song);
     existingFiles.add(relativeFile);
-    existingTitles.add(normalizedTitle);
+    existingTitles.add(normalizeSongValue(song.title));
     importedSourcePaths.add(normalizedSourcePath);
     addedSongs.push(song);
   }
 
-  const songs = saveSongs(existingSongs);
+  const songs = saveSongs([...storedSongs, ...addedSongs]);
   return { songs, addedSongs };
 }
 
@@ -167,6 +244,23 @@ function broadcastSongsUpdated(songs) {
   if (menuWindow && !menuWindow.isDestroyed()) {
     menuWindow.webContents.send("songs-updated", songs);
   }
+}
+
+function syncSongsFromDirectoryChange() {
+  clearTimeout(songsDirectoryChangeTimer);
+  songsDirectoryChangeTimer = setTimeout(() => {
+    broadcastSongsUpdated(loadSongs());
+  }, 100);
+}
+
+function watchSongsDirectory() {
+  fs.mkdirSync(songsDirectory, { recursive: true });
+
+  if (songsDirectoryWatcher) {
+    songsDirectoryWatcher.close();
+  }
+
+  songsDirectoryWatcher = fs.watch(songsDirectory, syncSongsFromDirectoryChange);
 }
 
 function createWindow() {
@@ -292,7 +386,10 @@ ipcMain.handle("remove-song", (event, file) => {
   return result;
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  watchSongsDirectory();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -300,4 +397,10 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   app.isQuiting = true;
+  clearTimeout(songsDirectoryChangeTimer);
+
+  if (songsDirectoryWatcher) {
+    songsDirectoryWatcher.close();
+    songsDirectoryWatcher = null;
+  }
 });

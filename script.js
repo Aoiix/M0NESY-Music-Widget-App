@@ -1,4 +1,6 @@
 const { ipcRenderer } = require("electron");
+const fs = require("fs");
+const path = require("path");
 
 function shuffleSongs(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -208,6 +210,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateSongTitle();
     }
 
+    function removeMissingSong(songFile) {
+        songs = songs.filter((song) => song.file !== songFile);
+        playQueue = playQueue.filter((song) => song.file !== songFile);
+
+        if (currentSongIndex >= playQueue.length) {
+            currentSongIndex = Math.max(playQueue.length - 1, 0);
+        }
+
+        updateSongTitle();
+        ipcRenderer.invoke("remove-song", songFile).catch(() => {});
+    }
+
     function loadSong(index) {
         if (!playQueue.length) {
             source.removeAttribute("src");
@@ -216,14 +230,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             progressBar.style.setProperty("--progress", "0%");
             timeDisplay.textContent = "0:00 / 0:00";
             updateSongTitle();
-            return;
+            return false;
         }
 
         currentSongIndex = index;
-        source.src = playQueue[index].file;
-        title.textContent = playQueue[index].title;
+        const song = playQueue[index];
+        const songPath = path.join(__dirname, song.file);
+
+        if (!fs.existsSync(songPath)) {
+            removeMissingSong(song.file);
+
+            if (!playQueue.length) {
+                loadSong(0);
+                return false;
+            }
+
+            return loadSong(Math.min(currentSongIndex, playQueue.length - 1));
+        }
+
+        source.src = song.file;
+        title.textContent = song.title;
         fitTextToWidth(title, 21, 12);
         audio.load();
+        return true;
     }
 
     function updateLoopIcon() {
@@ -244,7 +273,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         if (audio.paused) {
-            audio.play();
+            if (loadSong(currentSongIndex)) {
+                audio.play();
+            }
         } else {
             audio.pause();
         }
@@ -261,8 +292,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentSongIndex = 0;
         }
 
-        loadSong(currentSongIndex);
-        audio.play();
+        if (loadSong(currentSongIndex)) {
+            audio.play();
+        }
     };
 
     window.prevSong = function () {
@@ -276,8 +308,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentSongIndex = playQueue.length - 1;
         }
 
-        loadSong(currentSongIndex);
-        audio.play();
+        if (loadSong(currentSongIndex)) {
+            audio.play();
+        }
     };
 
     audio.addEventListener("loadedmetadata", () => {
@@ -371,8 +404,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const index = playQueue.findIndex((song) => song.file === file);
 
         if (index !== -1) {
-            loadSong(index);
-            audio.play();
+            if (loadSong(index)) {
+                audio.play();
+            }
         }
     });
 
