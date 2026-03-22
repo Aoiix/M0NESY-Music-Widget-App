@@ -17,7 +17,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     let loopEnabled = false;
     let isHovering = false;
     let isSleeping = false;
-    let hasShownLaunchClickCharacter = false;
+    let hasPlayedInitialClickAnimation = false;
+    const clickFrame0 = "assets/click/Click_0.png";
+    const clickFrame1 = "assets/click/Click_1.png";
+    const clickFrame2 = "assets/click/Click_2.png";
 
     const character = document.getElementById("character");
     const audio = document.getElementById("audio-player");
@@ -53,7 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             loop: true
         },
         click: {
-            frames: ["assets/click/Click_0.png"],
+            frames: [clickFrame0],
             fps: 1,
             loop: false
         }
@@ -70,7 +73,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     let isWindowVisible = !document.hidden;
     let lastActivityAt = 0;
     const activityThrottleMs = 250;
-    let loopButtonFeedbackTimer = null;
     const textFitCache = new Map();
 
     function fitTextToWidth(element, maxFontSize, minFontSize) {
@@ -127,6 +129,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function getNextBlinkLoopCount() {
         return Math.random() > 0.5 ? 1 : 2;
+    }
+
+    function getNextCharacterClickFrame() {
+        if (!hasPlayedInitialClickAnimation) {
+            hasPlayedInitialClickAnimation = true;
+            return clickFrame0;
+        }
+
+        const randomClickFrames = [clickFrame1, clickFrame2].filter((framePath) => {
+            const absoluteFramePath = path.join(__dirname, framePath);
+            return fs.existsSync(absoluteFramePath);
+        });
+
+        if (!randomClickFrames.length) {
+            return clickFrame0;
+        }
+
+        const randomIndex = Math.floor(Math.random() * randomClickFrames.length);
+        return randomClickFrames[randomIndex];
     }
 
     function clearInactivityTimer() {
@@ -379,19 +400,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    function triggerLoopButtonFeedback() {
-        if (loopButtonFeedbackTimer !== null) {
-            clearTimeout(loopButtonFeedbackTimer);
-        }
-
-        loopButton.classList.remove("animating");
-        void loopButton.offsetWidth;
-        loopButton.classList.add("animating");
-
-        loopButtonFeedbackTimer = setTimeout(() => {
-            loopButton.classList.remove("animating");
-            loopButtonFeedbackTimer = null;
-        }, 900);
+    function syncLoopButtonAnimationState() {
+        loopButton.classList.toggle("is-looping", loopEnabled);
     }
 
     window.updatePlayer = function () {
@@ -505,7 +515,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         loopEnabled = !loopEnabled;
         audio.loop = loopEnabled;
         updateLoopIcon();
-        triggerLoopButtonFeedback();
+        syncLoopButtonAnimationState();
     });
 
     character.addEventListener("click", (event) => {
@@ -515,12 +525,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         event.stopPropagation();
         registerActivity();
-
-        if (hasShownLaunchClickCharacter) {
-            return;
-        }
-
-        hasShownLaunchClickCharacter = true;
+        sequences.click.frames[0] = getNextCharacterClickFrame();
         playSequence("click");
     });
 
@@ -585,10 +590,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             rafTitleFitId = null;
         }
 
-        if (loopButtonFeedbackTimer !== null) {
-            clearTimeout(loopButtonFeedbackTimer);
-            loopButtonFeedbackTimer = null;
-        }
     });
 
     const initialSongs = await ipcRenderer.invoke("get-songs");
@@ -596,6 +597,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadSong(currentSongIndex);
     audio.volume = volumeSlider.value;
     updateLoopIcon();
+    syncLoopButtonAnimationState();
     resetInactivityTimer();
     playSequence("idle");
     scheduleSongTitleFit(true);

@@ -549,6 +549,9 @@ input,
   position: absolute;
   bottom: 2px;
   left: 130px;
+  width: 23px;
+  height: 20px;
+  display: block;
 
   background: none;
   border: none;
@@ -604,6 +607,7 @@ input,
 .loop-icon {
   display: block;
   width: 23px;
+  height: 20px;
   image-rendering: pixelated;
   transition: transform 140ms ease, filter 140ms ease, opacity 140ms ease;
 }
@@ -631,12 +635,12 @@ input,
   opacity: 1;
 }
 
-.loop.active.animating::before {
-  animation: loop-arrow-top 700ms ease-out 1;
+.loop.active.is-looping::before {
+  animation: loop-arrow-top 2200ms linear infinite;
 }
 
-.loop.active.animating::after {
-  animation: loop-arrow-bottom 700ms ease-out 1;
+.loop.active.is-looping::after {
+  animation: loop-arrow-bottom 2200ms linear infinite;
 }
 
 @keyframes loop-arrow-top {
