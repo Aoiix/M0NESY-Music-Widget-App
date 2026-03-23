@@ -388,6 +388,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true;
     }
 
+    function getSongSourceUrl(songFile) {
+        const songPath = path.isAbsolute(songFile) ? songFile : path.join(__dirname, songFile);
+        return pathToFileURL(songPath).toString();
+    }
+
+    function isCurrentSongLoaded() {
+        if (!playQueue.length || currentSongIndex < 0 || currentSongIndex >= playQueue.length) {
+            return false;
+        }
+
+        const expectedSrc = getSongSourceUrl(playQueue[currentSongIndex].file);
+        return audio.currentSrc === expectedSrc || source.src === expectedSrc || source.getAttribute("src") === expectedSrc;
+    }
+
     function updateLoopIcon() {
         loopButton.classList.toggle("active", loopEnabled);
 
@@ -410,9 +424,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         if (audio.paused) {
-            if (loadSong(currentSongIndex)) {
-                audio.play();
+            if (!isCurrentSongLoaded() && !loadSong(currentSongIndex)) {
+                return;
             }
+
+            audio.play();
         } else {
             audio.pause();
         }
@@ -545,7 +561,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     ipcRenderer.on("songs-updated", (event, nextSongs) => {
         const currentFile = playQueue[currentSongIndex] ? playQueue[currentSongIndex].file : null;
-        const activeFile = source.getAttribute("src");
+        const activeSrc = audio.currentSrc || source.src || source.getAttribute("src");
 
         setSongs(nextSongs);
 
@@ -561,7 +577,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentSongIndex = nextIndex;
         updateSongTitle();
 
-        if (!currentFile || activeFile !== currentFile || !playQueue.some((song) => song.file === activeFile)) {
+        const expectedCurrentSrc = currentFile ? getSongSourceUrl(currentFile) : null;
+        const currentSongStillInQueue = currentFile ? playQueue.some((song) => song.file === currentFile) : false;
+
+        if (!currentFile || activeSrc !== expectedCurrentSrc || !currentSongStillInQueue) {
             loadSong(nextIndex);
         }
     });
