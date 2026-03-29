@@ -5,3 +5,8 @@ m0NESY is one of my idols so I really wanted to make my first project around him
 Credits:
 Me (@xaoiix on discord),
 My friend (@_kaguya. on discord)
+
+## Run
+Use `npm start`.
+
+On first launch, the app now installs missing dependencies automatically before opening Electron.
