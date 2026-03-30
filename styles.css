@@ -9,6 +9,7 @@ html {
   margin: 0;
   padding: 0;
   background: transparent;
+  border-radius: var(--window-radius);
   overflow: hidden;
 }
 
@@ -17,16 +18,9 @@ body {
   padding: 0;
   width: 100%;
   height: 100%;
-  border: 5px solid #62E4C6;
-  border-radius: var(--window-radius);
   box-sizing: border-box;
-  background-color: #1F7A68;
+  background: transparent;
   overflow: hidden;
-
-  image-rendering: pixelated;
-
-  user-select: none;
-  -webkit-app-region: drag;
 }
 
 body::before {
@@ -34,7 +28,25 @@ body::before {
 }
 
 .app {
-  padding: 16px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+#m0NESYaudioplayer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #1F7A68;
+  border: 2px solid #355A40;
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 button,

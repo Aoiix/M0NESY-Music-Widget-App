@@ -16,7 +16,8 @@ let songsDirectoryWatcher;
 let songsDirectoryChangeTimer;
 const MENU_WIDTH = 248;
 const MENU_HEIGHT = 304;
-const WINDOW_RADIUS = 12;
+const MAIN_WINDOW_RADIUS = 16;
+const MENU_WINDOW_RADIUS = 0;
 
 function createRoundedRectShape(width, height, radius) {
   const safeWidth = Math.max(0, Math.floor(width));
@@ -55,7 +56,7 @@ function createRoundedRectShape(width, height, radius) {
 }
 
 function applyRoundedWindowShape(window, radius) {
-  if (process.platform !== "win32" || !window || window.isDestroyed()) {
+  if (!window || window.isDestroyed() || typeof window.setShape !== "function") {
     return;
   }
 
@@ -415,10 +416,10 @@ function createWindow() {
   });
 
   mainWindow.loadFile("index.html");
-  applyRoundedWindowShape(mainWindow, WINDOW_RADIUS);
+  applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS);
 
   mainWindow.on("moved", syncMenuPosition);
-  mainWindow.on("resize", () => applyRoundedWindowShape(mainWindow, WINDOW_RADIUS));
+  mainWindow.on("resize", () => applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS));
 }
 
 function createMenuWindow() {
@@ -445,7 +446,7 @@ function createMenuWindow() {
     transparent: true,
     show: false,
     hasShadow: false,
-    roundedCorners: true,
+    roundedCorners: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -454,7 +455,7 @@ function createMenuWindow() {
 
   lockMenuWindowBounds();
   menuWindow.loadFile("menu.html");
-  applyRoundedWindowShape(menuWindow, WINDOW_RADIUS);
+  applyRoundedWindowShape(menuWindow, MENU_WINDOW_RADIUS);
   syncMenuPosition();
 
   menuWindow.on("will-resize", (event) => {
@@ -464,7 +465,7 @@ function createMenuWindow() {
 
   menuWindow.on("resize", () => {
     lockMenuWindowBounds();
-    applyRoundedWindowShape(menuWindow, WINDOW_RADIUS);
+    applyRoundedWindowShape(menuWindow, MENU_WINDOW_RADIUS);
     syncMenuPosition();
   });
 
