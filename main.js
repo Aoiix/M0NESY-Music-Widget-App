@@ -1,9 +1,11 @@
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
 const legacySongsFilePath = path.join(__dirname, "songs.json");
 const legacySongsDirectory = path.join(__dirname, "songs");
+const WINDOW_ICON_PATH = path.join(__dirname, "assets", "m0NESY App Icon.png");
+const WINDOW_STATE_FILE_NAME = "window-state.json";
 
 let songsFilePath;
 let songsDirectory;
@@ -17,14 +19,31 @@ let songsDirectoryWatcher;
 let songsDirectoryChangeTimer;
 let isWidgetClickThrough = false;
 let isWidgetLocked = false;
-const DESKTOP_PINNED_MODE = true;
+let windowStateFilePath;
+const DESKTOP_PINNED_MODE = process.argv.includes("--widget-mode") || process.env.M0NESY_WIDGET_MODE === "1";
 const MENU_WIDTH = 248;
 const MENU_HEIGHT = 304;
+const MAIN_WINDOW_WIDTH = 320;
+const MAIN_WINDOW_HEIGHT = 452;
 const MAIN_WINDOW_RADIUS = 16;
 const MENU_WINDOW_RADIUS = 0;
 
 function applyMacWidgetAppMode() {
   if (process.platform !== "darwin") {
+    return;
+  }
+
+  if (!DESKTOP_PINNED_MODE) {
+    try {
+      app.setActivationPolicy("regular");
+    } catch (error) {
+      // Older Electron/macOS combinations may not support changing activation policy.
+    }
+
+    if (app.dock && typeof app.dock.show === "function") {
+      app.dock.show();
+    }
+
     return;
   }
 
@@ -115,7 +134,7 @@ function applyMainWidgetWindowMode() {
 
   mainWindow.setAlwaysOnTop(false);
   mainWindow.setVisibleOnAllWorkspaces(false);
-  mainWindow.setSkipTaskbar(true);
+  mainWindow.setSkipTaskbar(false);
   mainWindow.setFocusable(true);
   mainWindow.setIgnoreMouseEvents(isWidgetClickThrough, { forward: true });
   mainWindow.setMovable(!isWidgetLocked);
@@ -130,6 +149,111 @@ function lockMenuWindowBounds() {
   menuWindow.setMinimumSize(MENU_WIDTH, MENU_HEIGHT);
   menuWindow.setMaximumSize(MENU_WIDTH, MENU_HEIGHT);
   menuWindow.setContentSize(MENU_WIDTH, MENU_HEIGHT);
+}
+
+function initializeWindowStatePath() {
+  if (windowStateFilePath) {
+    return;
+  }
+
+  windowStateFilePath = path.join(app.getPath("userData"), WINDOW_STATE_FILE_NAME);
+}
+
+function loadMainWindowPosition() {
+  initializeWindowStatePath();
+
+  try {
+    const rawState = fs.readFileSync(windowStateFilePath, "utf8");
+    const parsedState = JSON.parse(rawState);
+
+    if (
+      !parsedState ||
+      typeof parsedState.x !== "number" ||
+      typeof parsedState.y !== "number"
+    ) {
+      return null;
+    }
+
+    return { x: Math.round(parsedState.x), y: Math.round(parsedState.y) };
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveMainWindowPosition() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  initializeWindowStatePath();
+  const { x, y } = mainWindow.getBounds();
+  fs.writeFileSync(windowStateFilePath, JSON.stringify({ x, y }, null, 2) + "\n", "utf8");
+}
+
+function clampMainWindowPosition(position) {
+  if (!position || typeof position.x !== "number" || typeof position.y !== "number") {
+    return null;
+  }
+
+  const nearestDisplay = screen.getDisplayNearestPoint({ x: position.x, y: position.y });
+
+  if (!nearestDisplay || !nearestDisplay.workArea) {
+    return position;
+  }
+
+  const { x, y, width, height } = nearestDisplay.workArea;
+  const clampedX = Math.min(Math.max(position.x, x), x + width - MAIN_WINDOW_WIDTH);
+  const clampedY = Math.min(Math.max(position.y, y), y + height - MAIN_WINDOW_HEIGHT);
+
+  return { x: clampedX, y: clampedY };
+}
+
+function ensureLinuxAutostartDesktopEntry() {
+  if (process.platform !== "linux" || !app.isPackaged) {
+    return;
+  }
+
+  try {
+    const autostartDirectory = path.join(app.getPath("home"), ".config", "autostart");
+    const desktopFilePath = path.join(autostartDirectory, "m0NESY Music Player.desktop");
+    const desktopEntry = [
+      "[Desktop Entry]",
+      "Type=Application",
+      "Version=1.0",
+      "Name=m0NESY Music Player",
+      "Comment=Desktop music widget inspired by m0NESY",
+      `Exec="${process.execPath}"`,
+      "Terminal=false",
+      "X-GNOME-Autostart-enabled=true",
+      "Categories=AudioVideo;"
+    ].join("\n") + "\n";
+
+    fs.mkdirSync(autostartDirectory, { recursive: true });
+    fs.writeFileSync(desktopFilePath, desktopEntry, "utf8");
+  } catch (error) {
+    // Fail silently: autostart support is best-effort on Linux desktop environments.
+  }
+}
+
+function ensureAutoLaunchOnBoot() {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  if (process.platform === "darwin" || process.platform === "win32") {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        openAsHidden: DESKTOP_PINNED_MODE,
+        path: process.execPath,
+        args: DESKTOP_PINNED_MODE ? ["--widget-mode"] : []
+      });
+    } catch (error) {
+      // If login item registration fails, continue app startup normally.
+    }
+  }
+
+  ensureLinuxAutostartDesktopEntry();
 }
 
 function showMenuWindow() {
@@ -511,9 +635,12 @@ function watchSongsDirectory() {
 }
 
 function createWindow() {
+  const savedPosition = clampMainWindowPosition(loadMainWindowPosition());
+
   mainWindow = new BrowserWindow({
-    width: 320,
-    height: 452,
+    width: MAIN_WINDOW_WIDTH,
+    height: MAIN_WINDOW_HEIGHT,
+    ...(savedPosition || {}),
     backgroundColor: "#00000000",
     resizable: false,
     maximizable: false,
@@ -521,10 +648,11 @@ function createWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: false,
-    skipTaskbar: true,
+    skipTaskbar: DESKTOP_PINNED_MODE,
     roundedCorners: true,
     movable: !DESKTOP_PINNED_MODE,
     focusable: !DESKTOP_PINNED_MODE,
+    icon: process.platform === "linux" || process.platform === "win32" ? WINDOW_ICON_PATH : undefined,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -535,7 +663,10 @@ function createWindow() {
   applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS);
   applyMainWidgetWindowMode();
 
-  mainWindow.on("moved", syncMenuPosition);
+  mainWindow.on("moved", () => {
+    syncMenuPosition();
+    saveMainWindowPosition();
+  });
   mainWindow.on("resize", () => applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS));
 }
 
@@ -673,10 +804,16 @@ ipcMain.handle("remove-song", (event, file) => {
 });
 
 app.whenReady().then(() => {
+  app.setName("m0NESY Music Player");
+  if (process.platform === "win32" && typeof app.setAppUserModelId === "function") {
+    app.setAppUserModelId("com.xaoiix.m0nesywidget");
+  }
+
   applyMacWidgetAppMode();
   initializeSongsLibraryPaths();
   migrateLegacySongsLibrary();
   watchSongsDirectory();
+  ensureAutoLaunchOnBoot();
   createWindow();
   createTray();
 });
@@ -687,6 +824,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   app.isQuiting = true;
+  saveMainWindowPosition();
   clearTimeout(songsDirectoryChangeTimer);
 
   if (songsDirectoryWatcher) {

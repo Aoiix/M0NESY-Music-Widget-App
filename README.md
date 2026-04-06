@@ -36,12 +36,17 @@ Run locally:
 npm start
 ```
 
-## Desktop widget mode (unsigned)
-The desktop app now runs in a persistent widget-like mode:
-- always on top
-- visible across workspaces
-- hidden from taskbar/dock switcher
-- tray menu with lock/click-through toggles
+## Desktop app mode (default)
+The desktop app now launches as a normal app (visible in Dock/Taskbar and app switchers), with tray controls available.
+
+## Optional widget mode
+If you want the hidden widget-style behavior, run:
+
+```bash
+npm run dev:widget
+```
+
+Widget mode is designed to stay out of Dock/Taskbar and can feel "invisible" if you are troubleshooting launch issues.
 
 Hotkeys in the widget window:
 - `Shift + L`: lock/unlock widget position

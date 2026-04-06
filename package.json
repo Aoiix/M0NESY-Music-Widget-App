@@ -7,11 +7,12 @@
     "start": "node bootstrap.js",
     "start:web": "node web-server.js",
     "dev": "electron .",
+    "dev:widget": "electron . --widget-mode",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux AppImage"
+    "dist:linux": "electron-builder --linux AppImage deb"
   },
   "devDependencies": {
     "electron": "^41.0.2",
@@ -20,7 +21,7 @@
   "build": {
     "appId": "com.xaoiix.m0nesywidget",
     "productName": "m0NESY Music Player",
-    "icon": "build/icon.png",
+    "icon": "icon.png",
     "files": [
       "assets/**/*",
       "songs/**/*",
@@ -43,10 +44,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "mac": {
       "identity": null,
-      "icon": "build/icon.png",
-      "extendInfo": {
-        "LSUIElement": true
-      },
+      "icon": "icon.png",
       "target": [
         "dmg",
         "zip"
@@ -54,19 +52,26 @@
       "category": "public.app-category.music"
     },
     "win": {
-      "icon": "build/icon.ico",
+      "icon": "icon.ico",
       "executableName": "m0NESY Music Player",
       "target": [
         "nsis",
         "portable"
       ]
     },
+    "nsis": {
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "m0NESY Music Player"
+    },
     "linux": {
-      "icon": "build/icon.png",
+      "icon": "icon.png",
       "executableName": "m0NESY Music Player",
       "desktop": {
         "entry": {
-          "Name": "m0NESY Music Player"
+          "Name": "m0NESY Music Player",
+          "Comment": "Desktop music widget inspired by m0NESY",
+          "StartupWMClass": "m0NESY Music Player"
         }
       },
       "target": [
