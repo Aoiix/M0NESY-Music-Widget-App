@@ -34,9 +34,13 @@ function launchElectron() {
     process.exit(1);
   }
 
+  const childEnv = { ...process.env };
+  delete childEnv.ELECTRON_RUN_AS_NODE;
+
   const electronProcess = spawn(electronBinaryPath, ["."], {
     cwd: projectRoot,
-    stdio: "inherit"
+    stdio: "inherit",
+    env: childEnv
   });
 
   electronProcess.on("exit", (code) => {

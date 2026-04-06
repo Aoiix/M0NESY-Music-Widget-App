@@ -1,11 +1,66 @@
 {
-  "name": "electron-app",
+  "name": "m0nesy-widget",
   "version": "1.0.0",
+  "description": "Desktop music widget inspired by m0NESY",
   "main": "main.js",
   "scripts": {
-    "start": "node bootstrap.js"
+    "start": "node bootstrap.js",
+    "dev": "electron .",
+    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "dist": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
+    "dist:win": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
+    "dist:linux": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^41.0.2"
+    "electron": "^41.0.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.xaoiix.m0nesywidget",
+    "productName": "m0NESY Widget",
+    "files": [
+      "assets/**/*",
+      "songs/**/*",
+      "index.html",
+      "menu.html",
+      "styles.css",
+      "menu.css",
+      "script.js",
+      "menu.js",
+      "main.js",
+      "songs.json",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "identity": null,
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo"
+    },
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
   }
 }
