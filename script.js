@@ -42,10 +42,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const loopButton = document.getElementById("loopButton");
     const loopIcon = document.getElementById("loopIcon");
     const menuButton = document.getElementById("menu-button");
-
-    if (!isElectronRuntime && menuButton) {
-        menuButton.style.display = "none";
-    }
+    let webMenuOverlay = null;
+    let webMenuList = null;
 
     const sequences = {
         idle: {
@@ -138,6 +136,136 @@ document.addEventListener("DOMContentLoaded", async () => {
             rafTitleFitId = null;
             fitTextToWidth(title, 21, 12);
         });
+    }
+
+    function ensureWebMenuOverlay() {
+        if (isElectronRuntime || webMenuOverlay) {
+            return;
+        }
+
+        webMenuOverlay = document.createElement("div");
+        webMenuOverlay.style.position = "fixed";
+        webMenuOverlay.style.inset = "0";
+        webMenuOverlay.style.background = "rgba(10, 14, 28, 0.75)";
+        webMenuOverlay.style.backdropFilter = "blur(3px)";
+        webMenuOverlay.style.zIndex = "9999";
+        webMenuOverlay.style.display = "none";
+        webMenuOverlay.style.alignItems = "center";
+        webMenuOverlay.style.justifyContent = "center";
+        webMenuOverlay.style.padding = "18px";
+
+        const panel = document.createElement("div");
+        panel.style.width = "min(520px, 100%)";
+        panel.style.maxHeight = "78vh";
+        panel.style.background = "#1a243a";
+        panel.style.border = "2px solid #4d648f";
+        panel.style.borderRadius = "16px";
+        panel.style.boxShadow = "0 18px 46px rgba(0, 0, 0, 0.45)";
+        panel.style.display = "flex";
+        panel.style.flexDirection = "column";
+        panel.style.overflow = "hidden";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.padding = "12px 14px";
+        header.style.background = "#22304d";
+        header.style.color = "#ffffff";
+        header.style.fontFamily = "\"Pixelify Sans\", sans-serif";
+        header.style.fontSize = "18px";
+        header.textContent = "Song Library";
+
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.textContent = "Close";
+        closeButton.style.border = "none";
+        closeButton.style.borderRadius = "10px";
+        closeButton.style.padding = "6px 10px";
+        closeButton.style.cursor = "pointer";
+        closeButton.style.fontFamily = "\"Pixelify Sans\", sans-serif";
+        closeButton.style.fontSize = "14px";
+        closeButton.style.background = "#4d648f";
+        closeButton.style.color = "#ffffff";
+        closeButton.addEventListener("click", () => {
+            if (webMenuOverlay) {
+                webMenuOverlay.style.display = "none";
+            }
+        });
+        header.appendChild(closeButton);
+
+        webMenuList = document.createElement("div");
+        webMenuList.style.padding = "10px";
+        webMenuList.style.overflowY = "auto";
+        webMenuList.style.display = "grid";
+        webMenuList.style.gap = "8px";
+
+        panel.appendChild(header);
+        panel.appendChild(webMenuList);
+        webMenuOverlay.appendChild(panel);
+        webMenuOverlay.addEventListener("click", (event) => {
+            if (event.target === webMenuOverlay) {
+                webMenuOverlay.style.display = "none";
+            }
+        });
+        document.body.appendChild(webMenuOverlay);
+    }
+
+    function renderWebMenuSongs() {
+        if (isElectronRuntime || !webMenuList) {
+            return;
+        }
+
+        webMenuList.innerHTML = "";
+
+        if (!playQueue.length) {
+            const emptyState = document.createElement("div");
+            emptyState.textContent = "No songs found.";
+            emptyState.style.color = "#cfe0ff";
+            emptyState.style.fontFamily = "\"Pixelify Sans\", sans-serif";
+            emptyState.style.padding = "8px 4px";
+            webMenuList.appendChild(emptyState);
+            return;
+        }
+
+        playQueue.forEach((song, index) => {
+            const itemButton = document.createElement("button");
+            itemButton.type = "button";
+            itemButton.style.width = "100%";
+            itemButton.style.textAlign = "left";
+            itemButton.style.padding = "10px";
+            itemButton.style.border = "1px solid #4d648f";
+            itemButton.style.borderRadius = "10px";
+            itemButton.style.background = index === currentSongIndex ? "#35507f" : "#2a3b5c";
+            itemButton.style.color = "#ffffff";
+            itemButton.style.cursor = "pointer";
+            itemButton.style.fontFamily = "\"Pixelify Sans\", sans-serif";
+            itemButton.style.fontSize = "14px";
+            itemButton.textContent = song.title;
+            itemButton.addEventListener("click", () => {
+                if (loadSong(index)) {
+                    audio.play();
+                }
+
+                if (webMenuOverlay) {
+                    webMenuOverlay.style.display = "none";
+                }
+            });
+            webMenuList.appendChild(itemButton);
+        });
+    }
+
+    function toggleWebMenu() {
+        if (isElectronRuntime) {
+            return;
+        }
+
+        ensureWebMenuOverlay();
+        renderWebMenuSongs();
+
+        if (webMenuOverlay) {
+            webMenuOverlay.style.display = webMenuOverlay.style.display === "flex" ? "none" : "flex";
+        }
     }
 
     function getNextBlinkLoopCount() {
@@ -349,6 +477,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         songs = Array.isArray(nextSongs) ? nextSongs.map((song) => ({ ...song })) : [];
         buildPlayQueue(currentFile);
         updateSongTitle();
+        renderWebMenuSongs();
     }
 
     function removeMissingSong(songFile) {
@@ -564,9 +693,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         playSequence("click");
     });
 
-    if (menuButton && ipcRenderer) {
+    if (menuButton) {
         menuButton.addEventListener("click", () => {
-            ipcRenderer.send("open-menu");
+            if (ipcRenderer) {
+                ipcRenderer.send("open-menu");
+                return;
+            }
+
+            toggleWebMenu();
         });
     }
 
