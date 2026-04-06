@@ -73,7 +73,7 @@ input,
 
 .titlebg {
   position: absolute;
-  top: 10px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
   width: 240px;
@@ -84,7 +84,7 @@ input,
 
 #song-title {
   position: absolute;
-  top: 12px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
 
@@ -109,7 +109,8 @@ input,
 #display-area {
   position: absolute;
   top: 65px;
-  left: 18px;
+  left: 50%;
+  transform: translateX(-50%);
 
   width: 283px;
   height: 249px;
@@ -226,7 +227,7 @@ input,
 .falconslogo {
   position: absolute;
   top: 40px;
-  left: 5px;
+  left: -3px;
 
   width: 60px;
   height: auto;
@@ -263,7 +264,7 @@ input,
 #controls-box {
   position: absolute;
   top: 323px;
-  left: 18px;
+  left: 50%;
 
   width: 283px;
   height: 116px;
@@ -304,7 +305,11 @@ input,
   overflow: visible;
 }
 
-#controls-box,
+#controls-box {
+  transform: translateX(-50%) translateZ(0);
+  backface-visibility: hidden;
+}
+
 .controlsbg {
   transform: translateZ(0);
   backface-visibility: hidden;
