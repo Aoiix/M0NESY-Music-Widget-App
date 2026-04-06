@@ -6,11 +6,11 @@
   "scripts": {
     "start": "node bootstrap.js",
     "dev": "electron .",
-    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
-    "dist": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
-    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
-    "dist:win": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win",
-    "dist:linux": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux AppImage"
   },
   "devDependencies": {
     "electron": "^41.0.2",
@@ -52,8 +52,7 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "category": "AudioVideo"
     },
