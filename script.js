@@ -21,6 +21,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const clickFrame0 = "assets/click/Click_0.png";
     const clickFrame1 = "assets/click/Click_1.png";
     const clickFrame2 = "assets/click/Click_2.png";
+    const clickFrame3 = "assets/click/Click_3.svg";
+    const randomClickFrames = [clickFrame1, clickFrame2, clickFrame3].filter((framePath) => {
+        const absoluteFramePath = path.join(__dirname, framePath);
+        return fs.existsSync(absoluteFramePath);
+    });
 
     const character = document.getElementById("character");
     const audio = document.getElementById("audio-player");
@@ -136,11 +141,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             hasPlayedInitialClickAnimation = true;
             return clickFrame0;
         }
-
-        const randomClickFrames = [clickFrame1, clickFrame2].filter((framePath) => {
-            const absoluteFramePath = path.join(__dirname, framePath);
-            return fs.existsSync(absoluteFramePath);
-        });
 
         if (!randomClickFrames.length) {
             return clickFrame0;
