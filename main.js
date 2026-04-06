@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
@@ -10,10 +10,13 @@ let songsDirectory;
 
 let mainWindow;
 let menuWindow;
+let tray;
 let isMenuReady = false;
 let shouldShowMenuWhenReady = false;
 let songsDirectoryWatcher;
 let songsDirectoryChangeTimer;
+let isWidgetClickThrough = false;
+let isWidgetLocked = false;
 const MENU_WIDTH = 248;
 const MENU_HEIGHT = 304;
 const MAIN_WINDOW_RADIUS = 16;
@@ -78,6 +81,18 @@ function syncMenuPosition() {
   menuWindow.setPosition(bounds.x + bounds.width + 10, bounds.y, false);
 }
 
+function applyMainWidgetWindowMode() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.setAlwaysOnTop(true, "screen-saver");
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mainWindow.setSkipTaskbar(true);
+  mainWindow.setIgnoreMouseEvents(isWidgetClickThrough, { forward: true });
+  mainWindow.setMovable(!isWidgetLocked);
+}
+
 function lockMenuWindowBounds() {
   if (!menuWindow || menuWindow.isDestroyed()) {
     return;
@@ -102,6 +117,61 @@ function showMenuWindow() {
   }
 
   menuWindow.focus();
+}
+
+function createTray() {
+  if (tray) {
+    return;
+  }
+
+  const iconPath = path.join(__dirname, "assets", "MainMusicPlayer.png");
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
+  tray = new Tray(trayIcon);
+  tray.setToolTip("m0NESY Widget");
+  refreshTrayMenu();
+}
+
+function refreshTrayMenu() {
+  if (!tray) {
+    return;
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Show Widget",
+      click: () => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          return;
+        }
+
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    },
+    {
+      label: isWidgetLocked ? "Unlock Position" : "Lock Position",
+      click: () => {
+        isWidgetLocked = !isWidgetLocked;
+        applyMainWidgetWindowMode();
+        refreshTrayMenu();
+      }
+    },
+    {
+      label: isWidgetClickThrough ? "Disable Click-Through" : "Enable Click-Through",
+      click: () => {
+        isWidgetClickThrough = !isWidgetClickThrough;
+        applyMainWidgetWindowMode();
+        refreshTrayMenu();
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => app.quit()
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
 }
 
 function sortSongs(songs) {
@@ -408,6 +478,8 @@ function createWindow() {
     fullscreenable: false,
     frame: false,
     transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
     roundedCorners: true,
     webPreferences: {
       nodeIntegration: true,
@@ -417,6 +489,7 @@ function createWindow() {
 
   mainWindow.loadFile("index.html");
   applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS);
+  applyMainWidgetWindowMode();
 
   mainWindow.on("moved", syncMenuPosition);
   mainWindow.on("resize", () => applyRoundedWindowShape(mainWindow, MAIN_WINDOW_RADIUS));
@@ -495,6 +568,23 @@ ipcMain.on("play-song", (event, file) => {
   mainWindow.webContents.send("select-song", file);
 });
 
+ipcMain.handle("widget-get-state", () => ({
+  clickThrough: isWidgetClickThrough,
+  locked: isWidgetLocked
+}));
+
+ipcMain.on("widget-toggle-click-through", () => {
+  isWidgetClickThrough = !isWidgetClickThrough;
+  applyMainWidgetWindowMode();
+  refreshTrayMenu();
+});
+
+ipcMain.on("widget-toggle-lock", () => {
+  isWidgetLocked = !isWidgetLocked;
+  applyMainWidgetWindowMode();
+  refreshTrayMenu();
+});
+
 ipcMain.on("menu-ready", () => {
   if (menuWindow && !menuWindow.isDestroyed()) {
     isMenuReady = true;
@@ -542,6 +632,7 @@ app.whenReady().then(() => {
   migrateLegacySongsLibrary();
   watchSongsDirectory();
   createWindow();
+  createTray();
 });
 
 app.on("window-all-closed", () => {
@@ -555,5 +646,10 @@ app.on("before-quit", () => {
   if (songsDirectoryWatcher) {
     songsDirectoryWatcher.close();
     songsDirectoryWatcher = null;
+  }
+
+  if (tray) {
+    tray.destroy();
+    tray = null;
   }
 });

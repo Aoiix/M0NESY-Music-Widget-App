@@ -1,7 +1,9 @@
-const { ipcRenderer } = require("electron");
-const fs = require("fs");
-const path = require("path");
-const { pathToFileURL } = require("url");
+const isElectronRuntime = typeof window !== "undefined" && typeof window.require === "function";
+const electronApi = isElectronRuntime ? window.require("electron") : null;
+const ipcRenderer = electronApi ? electronApi.ipcRenderer : null;
+const fs = isElectronRuntime ? window.require("fs") : null;
+const path = isElectronRuntime ? window.require("path") : null;
+const pathToFileURL = isElectronRuntime ? window.require("url").pathToFileURL : null;
 
 function shuffleSongs(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -22,10 +24,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const clickFrame1 = "assets/click/Click_1.png";
     const clickFrame2 = "assets/click/Click_2.png";
     const clickFrame3 = "assets/click/Click_3.svg";
-    const randomClickFrames = [clickFrame1, clickFrame2, clickFrame3].filter((framePath) => {
-        const absoluteFramePath = path.join(__dirname, framePath);
-        return fs.existsSync(absoluteFramePath);
-    });
+    const randomClickFrames = isElectronRuntime
+        ? [clickFrame1, clickFrame2, clickFrame3].filter((framePath) => {
+              const absoluteFramePath = path.join(__dirname, framePath);
+              return fs.existsSync(absoluteFramePath);
+          })
+        : [clickFrame1, clickFrame2, clickFrame3];
 
     const character = document.getElementById("character");
     const audio = document.getElementById("audio-player");
@@ -38,6 +42,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     const loopButton = document.getElementById("loopButton");
     const loopIcon = document.getElementById("loopIcon");
     const menuButton = document.getElementById("menu-button");
+
+    if (!isElectronRuntime && menuButton) {
+        menuButton.style.display = "none";
+    }
 
     const sequences = {
         idle: {
@@ -352,7 +360,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         updateSongTitle();
-        ipcRenderer.invoke("remove-song", songFile).catch(() => {});
+        if (ipcRenderer) {
+            ipcRenderer.invoke("remove-song", songFile).catch(() => {});
+        }
     }
 
     function loadSong(index) {
@@ -368,20 +378,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         currentSongIndex = index;
         const song = playQueue[index];
-        const songPath = path.isAbsolute(song.file) ? song.file : path.join(__dirname, song.file);
+        if (isElectronRuntime) {
+            const songPath = path.isAbsolute(song.file) ? song.file : path.join(__dirname, song.file);
 
-        if (!fs.existsSync(songPath)) {
-            removeMissingSong(song.file);
+            if (!fs.existsSync(songPath)) {
+                removeMissingSong(song.file);
 
-            if (!playQueue.length) {
-                loadSong(0);
-                return false;
+                if (!playQueue.length) {
+                    loadSong(0);
+                    return false;
+                }
+
+                return loadSong(Math.min(currentSongIndex, playQueue.length - 1));
             }
 
-            return loadSong(Math.min(currentSongIndex, playQueue.length - 1));
+            source.src = pathToFileURL(songPath).toString();
+        } else {
+            source.src = song.file;
         }
 
-        source.src = pathToFileURL(songPath).toString();
         title.textContent = song.title;
         scheduleSongTitleFit();
         audio.load();
@@ -389,6 +404,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     function getSongSourceUrl(songFile) {
+        if (!isElectronRuntime) {
+            return songFile;
+        }
+
         const songPath = path.isAbsolute(songFile) ? songFile : path.join(__dirname, songFile);
         return pathToFileURL(songPath).toString();
     }
@@ -545,50 +564,68 @@ document.addEventListener("DOMContentLoaded", async () => {
         playSequence("click");
     });
 
-    menuButton.addEventListener("click", () => {
-        ipcRenderer.send("open-menu");
-    });
+    if (menuButton && ipcRenderer) {
+        menuButton.addEventListener("click", () => {
+            ipcRenderer.send("open-menu");
+        });
+    }
 
-    ipcRenderer.on("select-song", (event, file) => {
-        const index = playQueue.findIndex((song) => song.file === file);
+    if (ipcRenderer) {
+        ipcRenderer.on("select-song", (event, file) => {
+            const index = playQueue.findIndex((song) => song.file === file);
 
-        if (index !== -1) {
-            if (loadSong(index)) {
-                audio.play();
+            if (index !== -1) {
+                if (loadSong(index)) {
+                    audio.play();
+                }
             }
-        }
-    });
+        });
 
-    ipcRenderer.on("songs-updated", (event, nextSongs) => {
-        const currentFile = playQueue[currentSongIndex] ? playQueue[currentSongIndex].file : null;
-        const activeSrc = audio.currentSrc || source.src || source.getAttribute("src");
+        ipcRenderer.on("songs-updated", (event, nextSongs) => {
+            const currentFile = playQueue[currentSongIndex] ? playQueue[currentSongIndex].file : null;
+            const activeSrc = audio.currentSrc || source.src || source.getAttribute("src");
 
-        setSongs(nextSongs);
+            setSongs(nextSongs);
 
-        if (!playQueue.length) {
-            loadSong(0);
-            return;
-        }
+            if (!playQueue.length) {
+                loadSong(0);
+                return;
+            }
 
-        const nextIndex = currentFile
-            ? Math.max(playQueue.findIndex((song) => song.file === currentFile), 0)
-            : 0;
+            const nextIndex = currentFile
+                ? Math.max(playQueue.findIndex((song) => song.file === currentFile), 0)
+                : 0;
 
-        currentSongIndex = nextIndex;
-        updateSongTitle();
+            currentSongIndex = nextIndex;
+            updateSongTitle();
 
-        const expectedCurrentSrc = currentFile ? getSongSourceUrl(currentFile) : null;
-        const currentSongStillInQueue = currentFile ? playQueue.some((song) => song.file === currentFile) : false;
+            const expectedCurrentSrc = currentFile ? getSongSourceUrl(currentFile) : null;
+            const currentSongStillInQueue = currentFile ? playQueue.some((song) => song.file === currentFile) : false;
 
-        if (!currentFile || activeSrc !== expectedCurrentSrc || !currentSongStillInQueue) {
-            loadSong(nextIndex);
-        }
-    });
+            if (!currentFile || activeSrc !== expectedCurrentSrc || !currentSongStillInQueue) {
+                loadSong(nextIndex);
+            }
+        });
+    }
 
     ["click", "keydown", "mousedown"].forEach((eventName) => {
         document.addEventListener(eventName, registerActivityFromEvent);
     });
     document.addEventListener("mousemove", registerActivityFromEvent, { passive: true });
+
+    document.addEventListener("keydown", (event) => {
+        if (!ipcRenderer || !event.shiftKey) {
+            return;
+        }
+
+        if (event.key.toLowerCase() === "w") {
+            ipcRenderer.send("widget-toggle-click-through");
+        }
+
+        if (event.key.toLowerCase() === "l") {
+            ipcRenderer.send("widget-toggle-lock");
+        }
+    });
 
     document.addEventListener("visibilitychange", () => {
         isWindowVisible = !document.hidden;
@@ -611,7 +648,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     });
 
-    const initialSongs = await ipcRenderer.invoke("get-songs");
+    const initialSongs = ipcRenderer
+        ? await ipcRenderer.invoke("get-songs")
+        : await fetch("songs.json")
+              .then((response) => response.json())
+              .catch(() => [{ title: "Hide", file: "songs/Hide.mp3" }]);
+
     setSongs(initialSongs);
     loadSong(currentSongIndex);
     audio.volume = volumeSlider.value;

@@ -36,6 +36,28 @@ Run locally:
 npm start
 ```
 
+## Desktop widget mode (unsigned)
+The desktop app now runs in a persistent widget-like mode:
+- always on top
+- visible across workspaces
+- hidden from taskbar/dock switcher
+- tray menu with lock/click-through toggles
+
+Hotkeys in the widget window:
+- `Shift + L`: lock/unlock widget position
+- `Shift + W`: enable/disable click-through
+
+## PWA mode (iPad/Home Screen)
+Start the web version:
+
+```bash
+npm run start:web
+```
+
+Then open `http://127.0.0.1:4173` and use:
+- Safari (iPad): Share -> Add to Home Screen
+- Chrome/Edge desktop: Install app prompt from address bar
+
 ## Important iPhone/iPad note
 This app is built with Electron, which targets desktop operating systems (macOS/Windows/Linux).
 Electron apps cannot be installed directly on iPhone/iPad.

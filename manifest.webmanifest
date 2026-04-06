@@ -1,0 +1,23 @@
+{
+  "name": "m0NESY Widget",
+  "short_name": "m0NESY",
+  "description": "Music widget app installable on desktop and iPad home screen.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101624",
+  "theme_color": "#101624",
+  "icons": [
+    {
+      "src": "assets/MainMusicPlayer.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/MainMusicPlayer.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

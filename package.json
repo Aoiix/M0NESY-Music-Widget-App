@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "node bootstrap.js",
+    "start:web": "node web-server.js",
     "dev": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
@@ -27,6 +28,9 @@
       "styles.css",
       "menu.css",
       "script.js",
+      "pwa-register.js",
+      "sw.js",
+      "manifest.webmanifest",
       "menu.js",
       "main.js",
       "songs.json",
