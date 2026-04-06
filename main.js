@@ -17,10 +17,27 @@ let songsDirectoryWatcher;
 let songsDirectoryChangeTimer;
 let isWidgetClickThrough = false;
 let isWidgetLocked = false;
+const DESKTOP_PINNED_MODE = true;
 const MENU_WIDTH = 248;
 const MENU_HEIGHT = 304;
 const MAIN_WINDOW_RADIUS = 16;
 const MENU_WINDOW_RADIUS = 0;
+
+function applyMacWidgetAppMode() {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  try {
+    app.setActivationPolicy("accessory");
+  } catch (error) {
+    // Older Electron/macOS combinations may not support changing activation policy.
+  }
+
+  if (app.dock && typeof app.dock.hide === "function") {
+    app.dock.hide();
+  }
+}
 
 function createRoundedRectShape(width, height, radius) {
   const safeWidth = Math.max(0, Math.floor(width));
@@ -86,9 +103,20 @@ function applyMainWidgetWindowMode() {
     return;
   }
 
-  mainWindow.setAlwaysOnTop(true, "screen-saver");
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (DESKTOP_PINNED_MODE) {
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setVisibleOnAllWorkspaces(false);
+    mainWindow.setSkipTaskbar(true);
+    mainWindow.setFocusable(false);
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    mainWindow.setMovable(false);
+    return;
+  }
+
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.setVisibleOnAllWorkspaces(false);
   mainWindow.setSkipTaskbar(true);
+  mainWindow.setFocusable(true);
   mainWindow.setIgnoreMouseEvents(isWidgetClickThrough, { forward: true });
   mainWindow.setMovable(!isWidgetLocked);
 }
@@ -144,6 +172,11 @@ function refreshTrayMenu() {
           return;
         }
 
+        if (DESKTOP_PINNED_MODE) {
+          mainWindow.showInactive();
+          return;
+        }
+
         mainWindow.show();
         mainWindow.focus();
       }
@@ -160,6 +193,15 @@ function refreshTrayMenu() {
       label: isWidgetClickThrough ? "Disable Click-Through" : "Enable Click-Through",
       click: () => {
         isWidgetClickThrough = !isWidgetClickThrough;
+        applyMainWidgetWindowMode();
+        refreshTrayMenu();
+      }
+    },
+    {
+      label: "Reset Widget Controls",
+      click: () => {
+        isWidgetClickThrough = false;
+        isWidgetLocked = false;
         applyMainWidgetWindowMode();
         refreshTrayMenu();
       }
@@ -478,9 +520,11 @@ function createWindow() {
     fullscreenable: false,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: true,
     roundedCorners: true,
+    movable: !DESKTOP_PINNED_MODE,
+    focusable: !DESKTOP_PINNED_MODE,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -518,6 +562,7 @@ function createMenuWindow() {
     frame: false,
     transparent: true,
     show: false,
+    skipTaskbar: true,
     hasShadow: false,
     roundedCorners: false,
     webPreferences: {
@@ -628,6 +673,7 @@ ipcMain.handle("remove-song", (event, file) => {
 });
 
 app.whenReady().then(() => {
+  applyMacWidgetAppMode();
   initializeSongsLibraryPaths();
   migrateLegacySongsLibrary();
   watchSongsDirectory();

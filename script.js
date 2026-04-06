@@ -5,6 +5,35 @@ const fs = isElectronRuntime ? window.require("fs") : null;
 const path = isElectronRuntime ? window.require("path") : null;
 const pathToFileURL = isElectronRuntime ? window.require("url").pathToFileURL : null;
 
+function pickExistingAssetPath(candidates) {
+    if (!Array.isArray(candidates) || !candidates.length) {
+        return "";
+    }
+
+    if (!isElectronRuntime || !fs || !path) {
+        return candidates[0];
+    }
+
+    for (const candidate of candidates) {
+        const absoluteCandidatePath = path.join(__dirname, candidate);
+
+        if (fs.existsSync(absoluteCandidatePath)) {
+            return candidate;
+        }
+    }
+
+    return candidates[0];
+}
+
+function getSpriteFrame(basePathWithoutExtension) {
+    return pickExistingAssetPath([
+        basePathWithoutExtension + ".png",
+        basePathWithoutExtension + ".PNG",
+        basePathWithoutExtension + ".svg",
+        basePathWithoutExtension + ".SVG"
+    ]);
+}
+
 function shuffleSongs(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -47,22 +76,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const sequences = {
         idle: {
-            frames: Array.from({ length: 5 }, (_, i) => "assets/idle/idle_" + i + ".png"),
+            frames: Array.from({ length: 5 }, (_, i) => getSpriteFrame("assets/idle/idle_" + i)),
             fps: 5,
             loop: true
         },
         blink: {
-            frames: Array.from({ length: 5 }, (_, i) => "assets/blink/blink_" + i + ".png"),
+            frames: Array.from({ length: 5 }, (_, i) => getSpriteFrame("assets/blink/blink_" + i)),
             fps: 7,
             loop: false
         },
         dance: {
-            frames: Array.from({ length: 8 }, (_, i) => "assets/dance/Dance_" + i + ".PNG"),
+            frames: Array.from({ length: 8 }, (_, i) => getSpriteFrame("assets/dance/Dance_" + i)),
             fps: 7,
             loop: true
         },
         sleep: {
-            frames: Array.from({ length: 6 }, (_, i) => "assets/sleep/sleep_" + i + ".png"),
+            frames: Array.from({ length: 6 }, (_, i) => getSpriteFrame("assets/sleep/sleep_" + i)),
             fps: 6,
             loop: true
         },

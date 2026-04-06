@@ -36,7 +36,21 @@ body::before {
 
   image-rendering: pixelated;
   user-select: none;
+}
+
+#m0NESYaudioplayer {
   -webkit-app-region: drag;
+}
+
+.drag-zone {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 62px;
+  z-index: 10;
+  -webkit-app-region: drag;
+  pointer-events: auto;
 }
 
 #m0NESYaudioplayer {
@@ -51,11 +65,21 @@ body::before {
 
 button,
 input,
+#character-container,
+#character,
+#display-area,
+.progress-row,
+#controls-box,
+#song-title {
+  -webkit-app-region: no-drag;
+}
+
+button,
+input,
 .slider,
 .controls,
 .progress,
 .volume {
-  -webkit-app-region: no-drag;
   cursor: pointer;
 }
 /* signature (moved down) */
