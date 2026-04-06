@@ -19,7 +19,8 @@
   },
   "build": {
     "appId": "com.xaoiix.m0nesywidget",
-    "productName": "m0NESY Widget",
+    "productName": "m0NESY Music Player",
+    "icon": "build/icon.png",
     "files": [
       "assets/**/*",
       "songs/**/*",
@@ -42,6 +43,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "mac": {
       "identity": null,
+      "icon": "build/icon.png",
       "target": [
         "dmg",
         "zip"
@@ -49,12 +51,21 @@
       "category": "public.app-category.music"
     },
     "win": {
+      "icon": "build/icon.ico",
+      "executableName": "m0NESY Music Player",
       "target": [
         "nsis",
         "portable"
       ]
     },
     "linux": {
+      "icon": "build/icon.png",
+      "executableName": "m0NESY Music Player",
+      "desktop": {
+        "entry": {
+          "Name": "m0NESY Music Player"
+        }
+      },
       "target": [
         "AppImage"
       ],
